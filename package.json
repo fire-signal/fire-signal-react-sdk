@@ -2,6 +2,16 @@
   "name": "@fire-signal/react-sdk",
   "version": "0.1.0",
   "description": "React SDK for Fire-Signal platform features",
+  "author": "Fire-Signal Contributors",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fire-signal/fire-signal-react-sdk"
+  },
+  "homepage": "https://github.com/fire-signal/fire-signal-react-sdk#readme",
+  "bugs": {
+    "url": "https://github.com/fire-signal/fire-signal-react-sdk/issues"
+  },
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
