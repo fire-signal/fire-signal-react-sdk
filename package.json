@@ -1,6 +1,6 @@
 {
   "name": "@fire-signal/react-sdk",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "React SDK for Fire-Signal platform features",
   "author": "Fire-Signal Contributors",
   "license": "MIT",
