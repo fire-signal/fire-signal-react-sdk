@@ -1,13 +1,10 @@
-import {
-  createContext,
-  useContext,
-  useMemo,
-  type ReactNode,
-} from 'react';
-import { FireSignal, type FlagsContext, type FlagDecision } from 'fire-signal';
+import { createContext, useContext, useMemo, type ReactNode } from 'react';
+import type { FlagDecision, FlagsContext } from './types';
 
 type InternalContextValue = {
-  fire: FireSignal;
+  publishableKey: string;
+  host?: string;
+  strictPlatformProvider: boolean;
   baseContext: FlagsContext;
 };
 
@@ -32,27 +29,14 @@ export function FireProvider({
   company,
   traits,
 }: FireProviderProps) {
-  const fire = useMemo(() => {
-    const instance = new FireSignal({
-      strictPlatformProvider,
-    });
-
-    const fireUrl = host
-      ? `fire://${publishableKey}@${host}`
-      : `fire://${publishableKey}`;
-
-    instance.add(fireUrl, ['platform']);
-    return instance;
-  }, [host, publishableKey, strictPlatformProvider]);
-
   const baseContext = useMemo<FlagsContext>(
     () => ({ user, company, traits }),
     [company, traits, user]
   );
 
   const value = useMemo(
-    () => ({ fire, baseContext }),
-    [fire, baseContext]
+    () => ({ publishableKey, host, strictPlatformProvider, baseContext }),
+    [publishableKey, host, strictPlatformProvider, baseContext]
   );
 
   return (
@@ -61,18 +45,25 @@ export function FireProvider({
 }
 
 export function useFireProvider() {
-  const ctx = useContext(FireReactContext);
-  if (!ctx) {
-    throw new Error('useFireProvider must be used inside <FireProvider>');
+  return useContext(FireReactContext);
+}
+
+function resolveBaseUrl(host?: string): string {
+  if (!host) return 'https://api.fire-signal.com/v1';
+  if (host.startsWith('http://') || host.startsWith('https://')) {
+    return `${host.replace(/\/$/, '')}/v1`;
   }
-  return ctx;
+  return `https://${host.replace(/\/$/, '')}/v1`;
 }
 
 export async function evaluateWithProvider<T = unknown>(
-  ctx: InternalContextValue,
+  ctx: InternalContextValue | null,
   flag: string,
   override: FlagsContext = {}
 ): Promise<FlagDecision<T>> {
+  if (!ctx) {
+    return { key: flag, enabled: false, reason: 'no provider', fetchedAt: new Date().toISOString() };
+  }
   const mergedContext: FlagsContext = {
     user: override.user || ctx.baseContext.user,
     company: override.company || ctx.baseContext.company,
@@ -82,5 +73,59 @@ export async function evaluateWithProvider<T = unknown>(
     },
   };
 
-  return ctx.fire.flags.evaluate<T>(flag, mergedContext, { tags: ['platform'] });
+  const response = await fetch(`${resolveBaseUrl(ctx.host)}/flags/evaluate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${ctx.publishableKey}`,
+    },
+    body: JSON.stringify({
+      flags: [flag],
+      context: mergedContext,
+    }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => 'unknown error');
+    const message = `Flag evaluation failed (${response.status}): ${text}`;
+    if (ctx.strictPlatformProvider) {
+      throw new Error(message);
+    }
+    return {
+      key: flag,
+      enabled: false,
+      reason: message,
+      fetchedAt: new Date().toISOString(),
+    };
+  }
+
+  const data = (await response.json()) as {
+    results?: Record<
+      string,
+      {
+        enabled: boolean;
+        variant?: string;
+        reason?: string;
+        value?: T;
+      }
+    >;
+  };
+  const result = data.results?.[flag];
+  if (!result) {
+    return {
+      key: flag,
+      enabled: false,
+      reason: 'flag not found',
+      fetchedAt: new Date().toISOString(),
+    };
+  }
+
+  return {
+    key: flag,
+    enabled: !!result.enabled,
+    variantKey: result.variant,
+    value: result.value,
+    reason: result.reason,
+    fetchedAt: new Date().toISOString(),
+  };
 }

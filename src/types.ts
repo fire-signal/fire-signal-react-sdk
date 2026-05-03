@@ -1,5 +1,27 @@
-import type { FlagDecision, FlagsContext } from 'fire-signal';
 import type { ReactNode } from 'react';
+
+export type FlagsContext = {
+  user?: { id: string; [k: string]: unknown };
+  company?: { id: string; [k: string]: unknown };
+  traits?: Record<string, unknown>;
+};
+
+export type FlagDecision<T = unknown> = {
+  key: string;
+  enabled: boolean;
+  variantKey?: string;
+  value?: T;
+  reason?: string;
+  fetchedAt: string;
+};
+
+export type TrackPayload = {
+  user?: { id: string; [k: string]: unknown };
+  company?: { id: string; [k: string]: unknown };
+  properties?: Record<string, unknown>;
+};
+
+export type IdentifyTraits = Record<string, unknown>;
 
 export type FireIdentity = {
   id: string;

@@ -1,115 +1,48 @@
 # @fire-signal/react-sdk
 
-React SDK for Fire Platform features powered by `fire-signal`.
+React SDK for Fire Platform feature flags and client-side telemetry.
 
-## Contents
+## What this package is for
 
-- [Quick Decision Guide](#quick-decision-guide)
-- [Requirements](#requirements)
-- [Installation](#installation)
-- [60-Second Quick Start](#60-second-quick-start)
-- [Applied Recipes](#applied-recipes)
-- [API Snapshot](#api-snapshot)
-- [Troubleshooting](#troubleshooting)
-- [Backend and Core SDK](#backend-and-core-sdk)
+Use this package in React apps when you need:
 
-Use when app needs:
+- Feature flag checks in UI (`useFlag`, `useVariantValue`, `useFlagDecision`, `FireFlag`)
+- Event tracking from user actions (`useTrack`)
+- Customer identification (`useIdentify`)
 
-- Feature flags (`useFlag`, `useVariantValue`, `useFlagDecision`, `FireFlag`)
-- Product events (`useTrack`)
-- Customer identity (`useIdentify`)
+Do not use this package for backend jobs, queues, cron, or server automations.
 
 ---
 
-## Quick Decision Guide
+## Security keys (for end users)
 
-Use this package if you want a React-first API for feature gating and product telemetry.
+- `fp_pub_*` is a **publishable key** (safe for frontend)
+- Use your publishable/client key in frontend apps (`NEXT_PUBLIC_*` env)
+- Never put your **server/private/live secret key** in browser code
 
-Do not use this package alone for backend-only workflows (jobs, cron, server automations). In that case, use `fire-signal` core SDK directly.
-
-Use `@fire-signal/react-sdk` for UI/runtime concerns.
-
-Use `fire-signal` core SDK for server-side automation and non-React execution contexts.
-
----
-
-## Requirements
-
-- Node.js 18+
-- React 18+
-- `fire-signal` installed in same app
-
-Notes:
-
-- Works with Next.js App Router (`'use client'` where needed).
-- `FireProvider` must run on client side.
-- `publishableKey` is safe for browser usage (`fp_pub_*`).
-- Never expose secret keys in frontend code.
+Rule of thumb: if key grants write/admin-level API access, keep it server-only.
 
 ---
 
 ## Installation
 
 ```bash
-npm install fire-signal @fire-signal/react-sdk
+npm install @fire-signal/react-sdk
+pnpm add @fire-signal/react-sdk
+yarn add @fire-signal/react-sdk
+bun add @fire-signal/react-sdk
 ```
 
-```bash
-pnpm add fire-signal @fire-signal/react-sdk
-yarn add fire-signal @fire-signal/react-sdk
-bun add fire-signal @fire-signal/react-sdk
-```
+Requirements:
+
+- Node.js 18+
+- React 18+
 
 ---
 
-## 60-Second Quick Start
+## 60-second setup (Next.js App Router)
 
-```tsx
-import { FireProvider, useFlag } from '@fire-signal/react-sdk';
-
-function CheckoutEntry() {
-  const { enabled, loading } = useFlag('checkout.new-flow');
-  if (loading) return null;
-  return enabled ? <div>New checkout enabled</div> : <div>Classic checkout</div>;
-}
-
-export default function App() {
-  return (
-    <FireProvider
-      publishableKey="fp_pub_xxx"
-      user={{ id: 'user_123' }}
-      company={{ id: 'acme_inc' }}
-      traits={{ plan: 'PLUS', locale: 'pt-BR' }}
-    >
-      <CheckoutEntry />
-    </FireProvider>
-  );
-}
-```
-
-Notes:
-
-- In common cloud setup, only `publishableKey` is required.
-- `host` is optional (custom/self-hosted API host only).
-
----
-
-## 5-Minute Checklist
-
-1. Install `fire-signal` and `@fire-signal/react-sdk`.
-2. Add `FireProvider` in your app client root.
-3. Add one boolean gate with `useFlag`.
-4. Add one config variant with `useVariantValue<T>`.
-5. Add one `track` call in a real user action.
-6. Validate values in Fire Platform dashboard.
-
-If steps 3-5 work, SDK integration is healthy.
-
----
-
-## Applied Recipes
-
-### 1) Provider wrapper (Next.js)
+### 1) Create a client provider
 
 ```tsx
 // app/providers.tsx
@@ -121,9 +54,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <FireProvider
       publishableKey={process.env.NEXT_PUBLIC_FIRE_PUBLISHABLE_KEY!}
+      host={process.env.NEXT_PUBLIC_API_URL} // optional (self-host/local)
       user={{ id: 'user_123' }}
-      company={{ id: 'acme_inc' }}
-      traits={{ plan: 'PLUS', country: 'BR' }}
+      traits={{ plan: 'PLUS', locale: 'en-US' }}
     >
       {children}
     </FireProvider>
@@ -131,137 +64,197 @@ export function Providers({ children }: { children: React.ReactNode }) {
 }
 ```
 
-Placement tip:
-
-- Keep provider as high as possible in client tree, so all flag/event hooks share same context.
-
-### 1.1) Provider wrapper (Vite/SPA)
+### 2) Mount it in layout
 
 ```tsx
-// main.tsx
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { FireProvider } from '@fire-signal/react-sdk';
-import App from './App';
+// app/layout.tsx
+import { Providers } from './providers';
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <FireProvider
-      publishableKey={import.meta.env.VITE_FIRE_PUBLISHABLE_KEY}
-      user={{ id: 'user_123' }}
-      traits={{ plan: 'PLUS' }}
-    >
-      <App />
-    </FireProvider>
-  </React.StrictMode>
-);
-```
-
-### 2) Feature flag + variant in page logic
-
-```tsx
-'use client';
-
-import { useFlag, useVariantValue } from '@fire-signal/react-sdk';
-
-export default function CheckoutPage() {
-  const newFlow = useFlag('checkout.new-flow');
-  const promo = useVariantValue<string>('checkout.promocode', {}, null);
-
-  if (newFlow.loading) return null;
-
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <main>
-      {promo.enabled && promo.value ? <p>Coupon: {promo.value}</p> : null}
-      {newFlow.enabled ? <button>Continue (new)</button> : <button>Continue</button>}
-    </main>
+    <html lang="en">
+      <body>
+        <Providers>{children}</Providers>
+      </body>
+    </html>
   );
-}
-```
-
-### 3) Declarative flag rendering with `FireFlag`
-
-```tsx
-import { FireFlag } from '@fire-signal/react-sdk';
-
-function PromoBanner() {
-  return (
-    <FireFlag<string>
-      flag="checkout.promocode"
-      fallback={<span>No promo available</span>}
-    >
-      {(decision) => <span>Promo: {decision.value}</span>}
-    </FireFlag>
-  );
-}
-```
-
-### 4) Identify + track in user flow
-
-```tsx
-import { useIdentify, useTrack } from '@fire-signal/react-sdk';
-
-function LoginSuccessButton() {
-  const identify = useIdentify();
-  const track = useTrack();
-
-  const onLoginSuccess = async () => {
-    await identify('user_123', {
-      email: 'ana@acme.com',
-      plan: 'PLUS',
-      locale: 'pt-BR',
-    });
-
-    await track('user.login_succeeded', {
-      user: { id: 'user_123' },
-      properties: { method: 'password' },
-    });
-  };
-
-  return <button onClick={onLoginSuccess}>Simulate login success</button>;
-}
-```
-
-Operational tip:
-
-- `identify` before critical `track` calls when event semantics depend on user traits.
-
-### 5) Override context per decision call
-
-```tsx
-import { useFlagDecision } from '@fire-signal/react-sdk';
-
-function CountrySpecificGate() {
-  const decision = useFlagDecision('checkout.new-flow', {
-    user: { id: 'user_123' },
-    traits: { country: 'BR' },
-  });
-
-  if (decision.loading) return null;
-  return <pre>{JSON.stringify(decision.decision, null, 2)}</pre>;
-}
-```
-
-### 6) Safe error handling pattern
-
-```tsx
-import { useFlag } from '@fire-signal/react-sdk';
-
-function PaymentGate() {
-  const gate = useFlag('payments.new-checkout');
-
-  if (gate.loading) return <span>Loading feature gate...</span>;
-  if (gate.error) return <span>Using safe fallback checkout</span>;
-
-  return gate.enabled ? <NewCheckout /> : <ClassicCheckout />;
 }
 ```
 
 ---
 
-## API Snapshot
+## Which flag hook should I use?
 
-### Type signatures
+If you want one default for most users, use `useFlag` first.
+
+- Use `useFlag` when you only care about on/off (`enabled`)
+- Use `useVariantValue<T>` when you need the flag value directly (promo code, number, JSON config)
+- Use `useFlagDecision<T>` when you need full decision metadata for debugging/analytics
+
+So yes: `useFlag` is the easiest default mental model.
+
+---
+
+## API: parameters and return values
+
+### Shared types
+
+```ts
+type FlagsContext = {
+  user?: { id: string; [k: string]: unknown };
+  company?: { id: string; [k: string]: unknown };
+  traits?: Record<string, unknown>;
+};
+
+type UseFlagOptions = {
+  enabled?: boolean;   // default: true
+  refreshMs?: number;  // no auto-refresh when omitted/0
+};
+```
+
+### `useFlag`
+
+```ts
+useFlag(flag: string, context?: FlagsContext, options?: UseFlagOptions)
+```
+
+Returns:
+
+- `enabled: boolean`
+- `loading: boolean`
+- `error?: Error`
+- `decision?: FlagDecision`
+- `refetch(): Promise<void>`
+
+Example:
+
+```tsx
+const checkoutFlow = useFlag('checkout.new-flow');
+if (checkoutFlow.loading) return null;
+return checkoutFlow.enabled ? <NewCheckout /> : <ClassicCheckout />;
+```
+
+### `useVariantValue<T>`
+
+```ts
+useVariantValue<T>(
+  flag: string,
+  context?: FlagsContext,
+  fallback?: T | null,
+  options?: UseFlagOptions
+)
+```
+
+Returns:
+
+- `value: T | null | undefined` (or your fallback)
+- `enabled: boolean`
+- `loading: boolean`
+- `error?: Error`
+- `decision?: FlagDecision<T>`
+- `refetch(): Promise<void>`
+
+Example:
+
+```tsx
+const promo = useVariantValue<string>('checkout.promocode', {}, null);
+return promo.enabled && promo.value ? <p>Promo: {promo.value}</p> : null;
+```
+
+### `useFlagDecision<T>`
+
+```ts
+useFlagDecision<T>(flag: string, context?: FlagsContext, options?: UseFlagOptions)
+```
+
+Use when you need the whole decision object (`reason`, `variantKey`, `fetchedAt`, etc).
+
+Example:
+
+```tsx
+const d = useFlagDecision('checkout.new-flow', { traits: { country: 'BR' } });
+if (d.loading) return null;
+return <pre>{JSON.stringify(d.decision, null, 2)}</pre>;
+```
+
+---
+
+## Automatic refresh (`refreshMs`) explained
+
+`refreshMs` is polling interval in **milliseconds**.
+
+- `10_000` means 10 seconds (`_` is just numeric separator in JS/TS)
+- hook calls `refetch()` automatically every interval
+- useful when flags can change while user stays on page
+
+Example:
+
+```tsx
+const promo = useVariantValue<string>(
+  'checkout.promocode',
+  {},
+  null,
+  { refreshMs: 10_000 }
+);
+```
+
+If you do not need polling, omit `refreshMs` and call `refetch()` only when needed.
+
+---
+
+## Better identify + track example
+
+```tsx
+'use client';
+
+import { useIdentify, useTrack } from '@fire-signal/react-sdk';
+
+export function CompleteCheckoutButton({
+  userId,
+  email,
+  workspaceId,
+  amount,
+}: {
+  userId: string;
+  email: string;
+  workspaceId: string;
+  amount: number;
+}) {
+  const identify = useIdentify();
+  const track = useTrack();
+
+  const onClick = async () => {
+    // 1) keep identity up to date
+    await identify(userId, {
+      email,
+      plan: 'PLUS',
+      workspaceId,
+    });
+
+    // 2) track action with explicit event properties
+    await track('checkout.completed', {
+      user: { id: userId },
+      properties: {
+        amount,
+        currency: 'USD',
+        workspaceId,
+      },
+    });
+  };
+
+  return <button onClick={onClick}>Complete checkout</button>;
+}
+```
+
+Why this is better:
+
+- identifies user first
+- sends business properties in event payload
+- keeps event names explicit and consistent
+
+---
+
+## `FireProvider` options
 
 ```ts
 type FireProviderProps = {
@@ -272,159 +265,75 @@ type FireProviderProps = {
   company?: { id: string; [k: string]: unknown };
   traits?: Record<string, unknown>;
 };
-
-type UseFlagResult = {
-  enabled: boolean;
-  loading: boolean;
-  error?: Error;
-  decision?: unknown;
-  refetch: () => Promise<unknown>;
-};
 ```
 
-### `FireProvider`
+Behavior of `strictPlatformProvider`:
 
-```tsx
-<FireProvider
-  publishableKey="fp_pub_xxx"
-  host="api.fire-signal.com"
-  strictPlatformProvider={false}
-  user={{ id: 'user_123' }}
-  company={{ id: 'acme_inc' }}
-  traits={{ plan: 'PLUS' }}
->
-  {children}
-</FireProvider>
-```
+- `false` (default): evaluation failures return disabled decision with reason
+- `true`: evaluation failures throw and appear in hook `error`
 
-Key props:
+Recommended:
 
-- `publishableKey` (required)
-- `host` (optional)
-- `strictPlatformProvider` (optional)
-- `user`, `company`, `traits` (optional base context)
-
-Behavioral notes:
-
-- `strictPlatformProvider={false}`: warn + no-op when provider target missing.
-- `strictPlatformProvider={true}`: throw errors early (recommended for development).
-
-### Hooks and components
-
-- `useFlag(flag, context?, options?)`
-  - returns: `enabled`, `loading`, `error`, `decision`, `refetch()`
-- `useVariantValue<T>(flag, context?, fallback?, options?)`
-  - returns: `value`, `enabled`, `loading`, `error`, `decision`, `refetch()`
-- `useFlagDecision<T>(flag, context?, options?)`
-  - returns full decision payload
-- `FireFlag`
-  - declarative rendering with `fallback`
-- `useTrack()`
-  - returns `(eventName, payload?) => Promise<boolean>`
-- `useIdentify()`
-  - returns `(externalId, traits?) => Promise<boolean>`
-
-Practical guidance:
-
-- Prefer `useFlag` for boolean gates.
-- Prefer `useVariantValue<T>` when flag controls data/config values.
-- Use `useFlagDecision<T>` when you need full decision metadata for diagnostics.
-
-### Behavior defaults
-
-- Decision hooks start as `loading=true` until first resolution.
-- `refetch()` forces reevaluation with current context.
-- `useVariantValue<T>` returns provided fallback when flag disabled or missing value.
-- `FireFlag` fallback renders when flag disabled, loading failed, or no valid value path.
+- `true` in development (faster setup debugging)
+- `false` in production (safe fallback behavior)
 
 ---
 
-## Framework Notes
+## Runtime behavior notes
 
-### Next.js App Router
-
-- Keep hooks only in client components (`'use client'`).
-- Wrap layout subtree via client `Providers` component.
-- Avoid reading browser-only env vars in server components.
-
-### CSR-only apps (Vite/CRA)
-
-- Mount `FireProvider` once near root.
-- Keep user/traits source stable to avoid unnecessary reevaluations.
-
-### SSR and edge runtimes
-
-- This package is client-first.
-- For server-side evaluations and backend automations, use core `fire-signal` SDK.
-
----
-
-## Testing Recipes
-
-### Component tests with lightweight mock
-
-```tsx
-// example: vitest/jest setup file
-vi.mock('@fire-signal/react-sdk', async () => {
-  const actual = await vi.importActual<typeof import('@fire-signal/react-sdk')>('@fire-signal/react-sdk');
-  return {
-    ...actual,
-    useFlag: () => ({ enabled: true, loading: false, refetch: async () => ({}) }),
-  };
-});
-```
-
-### Integration sanity test
-
-- Render app with real `FireProvider` in test environment.
-- Assert `loading -> resolved` state transition for one known flag.
-- Assert one `track` call resolves `true` for valid event payload.
+- Decision fetch runs on mount for each `flag + context` key
+- Decisions are cached in memory in current runtime/tab
+- In-flight duplicate requests are deduplicated
+- `refetch()` invalidates cache for that key and fetches again
+- `enabled: false` disables evaluation for that hook call
 
 ---
 
 ## Troubleshooting
 
-### "Nothing happens" when calling track/identify
+### "I enabled a flag but UI did not update"
 
-By default, missing platform target causes warn + no-op behavior.
+- No `refreshMs`: hook evaluates on mount, then stays cached
+- Call `refetch()` manually or enable polling with `refreshMs`
 
-If you want hard failure in development, enable strict mode:
+### "Flag is always disabled"
 
-```tsx
-<FireProvider publishableKey="fp_pub_xxx" strictPlatformProvider>
-  {children}
-</FireProvider>
-```
+- verify `publishableKey` is correct (`fp_pub_*`)
+- verify component is inside `FireProvider`
+- verify `host` points to correct API
+- verify flag is enabled in correct project/environment
 
-### Flags always loading
+### "Hook is always loading"
 
-Check:
+- check browser network errors/CORS
+- check API host reachability
+- try `strictPlatformProvider={true}` to expose failures via `error`
 
-- `publishableKey` format (`fp_pub_*`)
-- app wrapped by `FireProvider`
-- environment has network access to Fire API host
-- custom `host` correct when self-hosted
+### Next.js hook/hydration issues
 
-### Events are sent but not showing in expected audience/segment
-
-Check:
-
-- `identify` was called with correct `externalId`
-- `track` payload includes expected `user` context
-- trait names in app match trait names used in platform rules
-
-### Hydration or hook errors in Next.js
-
-Check:
-
-- components using hooks are marked with `'use client'`
-- `FireProvider` is mounted in a client wrapper (not server component)
+- mark hook components with `'use client'`
+- keep `FireProvider` in a client wrapper component
 
 ---
 
-## Backend and Core SDK
+## Vite example
 
-For backend usage (`track`, `identify`, `incident.report`, `flags.*`) and core SDK docs:
+```tsx
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import { FireProvider } from '@fire-signal/react-sdk';
+import App from './App';
 
-- root package docs: `../../README.md`
-- complete guide: `../../docs/SDK_COMPLETE_GUIDE.md`
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <FireProvider
+      publishableKey={import.meta.env.VITE_FIRE_PUBLISHABLE_KEY}
+      host={import.meta.env.VITE_FIRE_API_URL}
+      user={{ id: 'user_123' }}
+      traits={{ plan: 'PLUS' }}
+    >
+      <App />
+    </FireProvider>
+  </React.StrictMode>
+);
+```

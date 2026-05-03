@@ -1,7 +1,7 @@
 import { Fragment } from 'react';
 import type { ReactNode } from 'react';
-import type { FlagsContext } from 'fire-signal';
 import { useFlagDecision } from './hooks';
+import type { FlagsContext } from './types';
 import type { UseFlagOptions } from './types';
 
 export type FireFlagProps<T = unknown> = {
