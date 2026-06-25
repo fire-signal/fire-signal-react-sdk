@@ -38,7 +38,7 @@
     "react-dom": ">=18.0.0"
   },
   "dependencies": {
-    "fire-signal": "^0.5.0"
+    "fire-signal": "^0.5.1"
   },
   "devDependencies": {
     "@types/react": "^18.3.12",

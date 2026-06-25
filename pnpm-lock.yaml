@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       fire-signal:
-        specifier: ^0.5.0
-        version: 0.5.0
+        specifier: ^0.5.1
+        version: 0.5.1
       react:
         specifier: '>=18.0.0'
         version: 19.2.4
@@ -726,8 +726,8 @@ packages:
       picomatch:
         optional: true
 
-  fire-signal@0.5.0:
-    resolution: {integrity: sha512-OWP75fLlLVPzgiuWNuwZnqtfJMQN7rNV88YhMieuE3gQ1xoNXA8DrTUeVLw8RxNbbxTabOxpmKBkw2xZVKOQPw==}
+  fire-signal@0.5.1:
+    resolution: {integrity: sha512-IrqUv4FgWO6jlRnveE5xoRaTqHXG3bgogRVp/kGYmJILFFBrKbWQJG/wapJRaOu1louZcBSXLs51Suq+t2uYhw==}
     engines: {node: '>=18.0.0'}
     hasBin: true
 
@@ -1809,7 +1809,7 @@ snapshots:
     optionalDependencies:
       picomatch: 4.0.4
 
-  fire-signal@0.5.0:
+  fire-signal@0.5.1:
     dependencies:
       commander: 12.1.0
       handlebars: 4.7.9
